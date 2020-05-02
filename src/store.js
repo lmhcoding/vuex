@@ -26,12 +26,19 @@ export class Store {
     } = options
 
     // store internal state
+    // 标记是否在提交mutation
+    // strict模式下通过该属性判断是否直接修改store
     this._committing = false
     this._actions = Object.create(null)
     this._actionSubscribers = []
     this._mutations = Object.create(null)
     this._wrappedGetters = Object.create(null)
+    // 模块收集
+    // 以传入Vue.Store的options为根模块、options.modules为子模块
+    // options.modules中定义的模块会被收集到根模块的_children对象中
+    // 嵌套子模块会被收集到子模块的_children中
     this._modules = new ModuleCollection(options)
+    // namespace -> module
     this._modulesNamespaceMap = Object.create(null)
     this._subscribers = []
     this._watcherVM = new Vue()
@@ -49,15 +56,20 @@ export class Store {
     // strict mode
     this.strict = strict
 
+    // 传入Vuex.Store构造函数的options的state属性
     const state = this._modules.root.state
 
     // init root module.
     // this also recursively registers all sub-modules
     // and collects all module getters inside this._wrappedGetters
+    // 初始化根模块
+    // 同时递归注册所有子模块
+    // getter会被收集到_wrappedGetters中
     installModule(this, state, [], this._modules.root)
 
     // initialize the store vm, which is responsible for the reactivity
     // (also registers _wrappedGetters as computed properties)
+    // 初始化一个vue实例挂载到store._vm中，该实例以state为data、_wrappedGetters为计算属性
     resetStoreVM(this, state)
 
     // apply plugins
@@ -300,6 +312,7 @@ function installModule (store, rootState, path, module, hot) {
   const namespace = store._modules.getNamespace(path)
 
   // register in namespace map
+  // 建立namespace -> module的映射
   if (module.namespaced) {
     if (store._modulesNamespaceMap[namespace] && process.env.NODE_ENV !== 'production') {
       console.error(`[vuex] duplicate namespace ${namespace} for the namespaced module ${path.join('/')}`)
@@ -316,24 +329,32 @@ function installModule (store, rootState, path, module, hot) {
     })
   }
 
+  // 构造context对象
+  // {dispatch, commit, getters, state}
+  // namespace存在，则context对象的属性都带有命名空间
   const local = module.context = makeLocalContext(store, namespace, path)
 
+  // 注册mutation
   module.forEachMutation((mutation, key) => {
     const namespacedType = namespace + key
     registerMutation(store, namespacedType, mutation, local)
   })
 
+  // 注册action
   module.forEachAction((action, key) => {
+    // action可以是函数，也可以是{root, handler}
     const type = action.root ? key : namespace + key
     const handler = action.handler || action
     registerAction(store, type, handler, local)
   })
 
+  // 注册getter
   module.forEachGetter((getter, key) => {
     const namespacedType = namespace + key
     registerGetter(store, namespacedType, getter, local)
   })
 
+  // 递归注册子模块
   module.forEachChild((child, key) => {
     installModule(store, rootState, path.concat(key), child, hot)
   })
@@ -346,6 +367,7 @@ function installModule (store, rootState, path, module, hot) {
 function makeLocalContext (store, namespace, path) {
   const noNamespace = namespace === ''
 
+  // 带命名空间时且root为falsy，对store.dispatch和store.commit做一层拦截，使这两函数的type字段带有命名空间
   const local = {
     dispatch: noNamespace ? store.dispatch : (_type, _payload, _options) => {
       const args = unifyObjectStyle(_type, _payload, _options)
@@ -437,6 +459,7 @@ function registerAction (store, type, handler, local) {
       rootGetters: store.getters,
       rootState: store.state
     }, payload, cb)
+    // res非promise，将其promise化
     if (!isPromise(res)) {
       res = Promise.resolve(res)
     }

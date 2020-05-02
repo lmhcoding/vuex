@@ -7,16 +7,19 @@ export default class ModuleCollection {
     this.register([], rawRootModule, false)
   }
 
+  // 根据传入的path获取指定module
   get (path) {
     return path.reduce((module, key) => {
       return module.getChild(key)
     }, this.root)
   }
 
+  // 根据path获取命名空间
   getNamespace (path) {
     let module = this.root
     return path.reduce((namespace, key) => {
       module = module.getChild(key)
+      // namespaced为true才会创建命名空间，否则沿用父命名空间
       return namespace + (module.namespaced ? key + '/' : '')
     }, '')
   }
@@ -30,8 +33,9 @@ export default class ModuleCollection {
       assertRawModule(path, rawModule)
     }
 
+    // 初始化模块
     const newModule = new Module(rawModule, runtime)
-    if (path.length === 0) {
+    if (path.length === 0) { // path为空，则为root module
       this.root = newModule
     } else {
       const parent = this.get(path.slice(0, -1))
@@ -39,6 +43,8 @@ export default class ModuleCollection {
     }
 
     // register nested modules
+    // 注册嵌套子模块
+    // 为一个递归过程，将模块添加到父模块的_children中
     if (rawModule.modules) {
       forEachValue(rawModule.modules, (rawChildModule, key) => {
         this.register(path.concat(key), rawChildModule, runtime)
